@@ -86,3 +86,14 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  fonts:
+    - family: LynkcoType
+      fonts:
+        - asset: fonts/LynkcoType/LynkcoType-Light.ttf
+          weight: 300
+        - asset: fonts/LynkcoType/LynkcoType-Regular.ttf
+          weight: 400
+        - asset: fonts/LynkcoType/LynkcoType-Medium.ttf
+          weight: 500
+        - asset: fonts/LynkcoType/LynkcoType-Bold.ttf
+          weight: 700
