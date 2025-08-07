@@ -14,7 +14,8 @@ class MyApp extends StatelessWidget {
     return CupertinoApp(
       title: 'Zeekr',
       onGenerateTitle: (context) => 'Zeekr',
-      home: const HomeView(),
+      // home: const HomeView(),
+      home: const XLogView(),
     );
   }
 }
