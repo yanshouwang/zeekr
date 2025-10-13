@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
-import 'animated_zeekr_logo.dart';
+import 'animated_flutter_logo.dart';
 
 class HomeView extends StatelessWidget {
   const HomeView({super.key});
@@ -12,7 +12,7 @@ class HomeView extends StatelessWidget {
         child: FractionallySizedBox(
           widthFactor: 0.5,
           heightFactor: 0.5,
-          child: AnimatedZeekrLogo(),
+          child: AnimatedFlutterLogo(),
         ),
       ),
     );
