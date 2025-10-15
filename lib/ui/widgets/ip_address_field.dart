@@ -967,6 +967,14 @@ class _IpAddressFieldState extends State<IpAddressField>
           maxLengthEnforcement: _effectiveMaxLengthEnforcement,
         ),
       LengthLimitingTextInputFormatter(3),
+      TextInputFormatter.withFunction((oldValue, newValue) {
+        if (newValue.text.isNotEmpty) {
+          final newNum = int.tryParse(newValue.text);
+          if (newNum == null) return oldValue;
+          if (newNum > 255) return newValue.copyWith(text: '255');
+        }
+        return newValue;
+      }),
     ];
 
     // Set configuration as disabled if not otherwise specified. If specified,
@@ -1086,7 +1094,7 @@ class _IpAddressFieldState extends State<IpAddressField>
                     theme.colorScheme.primary;
         selectionColor =
             selectionStyle.selectionColor ??
-            theme.colorScheme.primary.withOpacity(0.40);
+            theme.colorScheme.primary.withValues(alpha: 0.40);
         handleDidGainAccessibilityFocus = () {
           // Automatically activate the TextField when it receives accessibility focus.
           if (!_effectiveFocusNode.hasFocus &&
@@ -1136,11 +1144,7 @@ class _IpAddressFieldState extends State<IpAddressField>
             if (i.isOdd) {
               return Visibility(
                 visible: _isFocused || !_isEmpty,
-                // child: Text('·', style: style, strutStyle: widget.strutStyle),
-                child: SizedBox.square(
-                  dimension: 4.0,
-                  child: Material(shape: CircleBorder(), color: style.color),
-                ),
+                child: Text('.', style: style, strutStyle: widget.strutStyle),
               );
             } else {
               final controller = _controllers[i ~/ 2].value;
