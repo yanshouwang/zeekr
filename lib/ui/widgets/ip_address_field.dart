@@ -29,9 +29,10 @@ class IpAddressField extends StatefulWidget {
   const IpAddressField({
     super.key,
     this.groupId = EditableText,
+    this.controller,
+    // this.focusNode,
     this.undoController,
     this.decoration = const InputDecoration(),
-    TextInputType? keyboardType,
     this.textInputAction,
     this.textCapitalization = TextCapitalization.none,
     this.style,
@@ -103,7 +104,8 @@ class IpAddressField extends StatefulWidget {
     this.canRequestFocus = true,
     this.spellCheckConfiguration,
     this.magnifierConfiguration,
-  }) : maxLength = null,
+  }) : focusNode = null,
+       maxLength = null,
        maxLengthEnforcement = null,
        assert(obscuringCharacter.length == 1),
        smartDashesType =
@@ -132,20 +134,20 @@ class IpAddressField extends StatefulWidget {
        //        maxLength > 0,
        //  ),
        // Assert the following instead of setting it directly to avoid surprising the user by silently changing the value they set.
-       assert(
-         !identical(textInputAction, TextInputAction.newline) ||
-             maxLines == 1 ||
-             !identical(keyboardType, TextInputType.text),
-         'Use keyboardType TextInputType.multiline when using TextInputAction.newline on a multiline TextField.',
-       ),
-       keyboardType =
-           keyboardType ??
-           (maxLines == 1 ? TextInputType.text : TextInputType.multiline),
+       //  assert(
+       //    !identical(textInputAction, TextInputAction.newline) ||
+       //        maxLines == 1 ||
+       //        !identical(keyboardType, TextInputType.text),
+       //    'Use keyboardType TextInputType.multiline when using TextInputAction.newline on a multiline TextField.',
+       //  ),
+       keyboardType = TextInputType.number,
        enableInteractiveSelection =
            enableInteractiveSelection ?? (!readOnly || !obscureText);
 
   final TextMagnifierConfiguration? magnifierConfiguration;
   final Object groupId;
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
   final InputDecoration? decoration;
   final TextInputType keyboardType;
   final TextInputAction? textInputAction;
@@ -525,19 +527,16 @@ class IpAddressField extends StatefulWidget {
 class _IpAddressFieldState extends State<IpAddressField>
     with RestorationMixin
     implements TextSelectionGestureDetectorBuilderDelegate, AutofillClient {
-  late final List<RestorableTextEditingController> _controllers;
+  late final List<TextEditingController> _controllers;
   late final List<FocusNode> _focusNodes;
 
-  FocusNode get _effectiveFocusNode {
-    final controller =
-        _controllers.firstWhereOrNull(
-          (i) => i.value.text.characters.length < 3,
-        ) ??
-        _controllers.last;
-    final index = _controllers.indexOf(controller);
-    debugPrint('IpAddressField._effectiveFocusNode: $index');
-    return _focusNodes[index];
-  }
+  RestorableTextEditingController? _controller;
+  TextEditingController get _effectiveController =>
+      widget.controller ?? _controller!.value;
+
+  FocusNode? _focusNode;
+  FocusNode get _effectiveFocusNode =>
+      widget.focusNode ?? (_focusNode ??= FocusNode());
 
   MaxLengthEnforcement get _effectiveMaxLengthEnforcement =>
       widget.maxLengthEnforcement ??
@@ -571,14 +570,17 @@ class _IpAddressFieldState extends State<IpAddressField>
 
   bool get _isEnabled => widget.enabled ?? widget.decoration?.enabled ?? true;
 
-  int get _currentLength => _controllers
-      .map((i) => i.value.text.characters.length)
-      .reduce((i, j) => i + j);
+  int get _currentLength => _effectiveController.value.text.characters.length;
 
   bool get _hasIntrinsicError =>
       widget.maxLength != null &&
       widget.maxLength! > 0 &&
-      (!restorePending && _currentLength > widget.maxLength!);
+      (widget.controller == null
+          ? !restorePending &&
+              _effectiveController.value.text.characters.length >
+                  widget.maxLength!
+          : _effectiveController.value.text.characters.length >
+              widget.maxLength!);
 
   bool get _hasError =>
       widget.decoration?.errorText != null ||
@@ -590,12 +592,9 @@ class _IpAddressFieldState extends State<IpAddressField>
       _getEffectiveDecoration().errorStyle?.color ??
       Theme.of(context).colorScheme.error;
 
-  String get _currentText => _controllers
-      .map((i) => i.value.text)
-      .where((i) => i.isNotEmpty)
-      .join('.');
+  bool get _isEmpty => _effectiveController.text.isEmpty;
+  // bool get _isFocused => _effectiveFocusNode.hasFocus;
   bool get _isFocused => _focusNodes.any((i) => i.hasFocus);
-  bool get _isEmpty => _currentText.isEmpty;
 
   InputDecoration _getEffectiveDecoration() {
     final theme = Theme.of(context);
@@ -681,22 +680,54 @@ class _IpAddressFieldState extends State<IpAddressField>
     super.initState();
     _selectionGestureDetectorBuilder =
         _IpAddressFieldSelectionGestureDetectorBuilder(state: this);
-    _controllers = List.generate(4, (i) => RestorableTextEditingController());
-    if (!restorePending) {
-      _registerControllers();
+
+    if (widget.controller == null) {
+      _createLocalController();
     }
-    _focusNodes = List.generate(
-      4,
-      (i) =>
-          FocusNode()
-            ..canRequestFocus = widget.canRequestFocus && _isEnabled
-            ..addListener(_handleFocusChanged),
-    );
+
+    // TODO: How to make this focusable.
+    // _effectiveFocusNode.canRequestFocus = widget.canRequestFocus && _isEnabled;
+    _effectiveFocusNode.canRequestFocus = false;
+    _effectiveFocusNode.addListener(_handleFocusChanged);
+
+    final nums = _effectiveController.text._nums;
+    _controllers = List.generate(4, (i) {
+      final text = nums[i]?.toString();
+      return TextEditingController(text: text)
+        ..addListener(_handleInnerValueChanged);
+    });
+
+    _focusNodes = List.generate(4, (i) {
+      return FocusNode(
+          onKeyEvent: (node, event) {
+            final controller = _controllers[i];
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.backspace &&
+                controller.selection.textBefore(controller.text).isEmpty &&
+                i > 0) {
+              final newController = _controllers[i - 1];
+              final newFocusNode = _focusNodes[i - 1];
+              if (newController.text.isNotEmpty) {
+                final end = newController.text.length - 1;
+                final text = newController.text.substring(0, end);
+                newController.setText(text);
+              }
+              newFocusNode.requestFocus();
+              return KeyEventResult.handled;
+            } else {
+              return KeyEventResult.ignored;
+            }
+          },
+        )
+        ..canRequestFocus = widget.canRequestFocus && _isEnabled
+        ..addListener(_handleFocusChanged);
+    });
+
     _initStatesController();
   }
 
   bool get _canRequestFocus {
-    final NavigationMode mode =
+    final mode =
         MediaQuery.maybeNavigationModeOf(context) ?? NavigationMode.traditional;
     return switch (mode) {
       NavigationMode.traditional => widget.canRequestFocus && _isEnabled,
@@ -710,6 +741,7 @@ class _IpAddressFieldState extends State<IpAddressField>
     for (var focusNode in _focusNodes) {
       focusNode.canRequestFocus = _canRequestFocus;
     }
+    // _effectiveFocusNode.canRequestFocus = _canRequestFocus;
   }
 
   @override
@@ -720,13 +752,38 @@ class _IpAddressFieldState extends State<IpAddressField>
       focusNode.canRequestFocus = _canRequestFocus;
     }
 
-    // if (_effectiveFocusNode.hasFocus &&
-    //     widget.readOnly != oldWidget.readOnly &&
-    //     _isEnabled) {
-    //   if (_effectiveController.selection.isCollapsed) {
-    //     _showSelectionHandles = !widget.readOnly;
-    //   }
-    // }
+    // TODO: Update inner controller values.
+
+    if (widget.controller == null && oldWidget.controller != null) {
+      _createLocalController(oldWidget.controller!.value);
+    } else if (widget.controller != null && oldWidget.controller == null) {
+      unregisterFromRestoration(_controller!);
+      _controller!.removeListener(_handleValueChanged);
+      _controller!.dispose();
+      _controller = null;
+    }
+
+    if (widget.controller != oldWidget.controller) {
+      (oldWidget.controller ?? _controller)?.removeListener(
+        _handleValueChanged,
+      );
+      (widget.controller ?? _controller)?.addListener(_handleValueChanged);
+    }
+
+    if (widget.focusNode != oldWidget.focusNode) {
+      (oldWidget.focusNode ?? _focusNode)?.removeListener(_handleFocusChanged);
+      (widget.focusNode ?? _focusNode)?.addListener(_handleFocusChanged);
+    }
+
+    // _effectiveFocusNode.canRequestFocus = _canRequestFocus;
+
+    if (_effectiveFocusNode.hasFocus &&
+        widget.readOnly != oldWidget.readOnly &&
+        _isEnabled) {
+      if (_effectiveController.selection.isCollapsed) {
+        _showSelectionHandles = !widget.readOnly;
+      }
+    }
 
     if (widget.statesController == oldWidget.statesController) {
       _statesController.update(WidgetState.disabled, !_isEnabled);
@@ -745,12 +802,24 @@ class _IpAddressFieldState extends State<IpAddressField>
 
   @override
   void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
-    _registerControllers();
+    if (_controller != null) {
+      _registerController();
+    }
   }
 
-  void _registerControllers() {
-    for (var controller in _controllers) {
-      registerForRestoration(controller, 'controller#${controller.hashCode}');
+  void _registerController() {
+    assert(_controller != null);
+    registerForRestoration(_controller!, 'controller');
+  }
+
+  void _createLocalController([TextEditingValue? value]) {
+    assert(_controller == null);
+    _controller =
+        value == null
+            ? RestorableTextEditingController()
+            : RestorableTextEditingController.fromValue(value);
+    if (!restorePending) {
+      _registerController();
     }
   }
 
@@ -760,6 +829,7 @@ class _IpAddressFieldState extends State<IpAddressField>
   @override
   void dispose() {
     for (var controller in _controllers) {
+      controller.removeListener(_handleInnerValueChanged);
       controller.dispose();
     }
     for (var focusNode in _focusNodes) {
@@ -767,6 +837,10 @@ class _IpAddressFieldState extends State<IpAddressField>
         ..removeListener(_handleFocusChanged)
         ..dispose();
     }
+    _effectiveController.removeListener(_handleValueChanged);
+    _effectiveFocusNode.removeListener(_handleFocusChanged);
+    _controller?.dispose();
+    _focusNode?.dispose();
     _statesController.removeListener(_handleStatesControllerChange);
     _internalStatesController?.dispose();
     super.dispose();
@@ -789,9 +863,9 @@ class _IpAddressFieldState extends State<IpAddressField>
       return false;
     }
 
-    // if (widget.readOnly && _effectiveController.selection.isCollapsed) {
-    //   return false;
-    // }
+    if (widget.readOnly && _effectiveController.selection.isCollapsed) {
+      return false;
+    }
 
     if (!_isEnabled) {
       return false;
@@ -802,11 +876,35 @@ class _IpAddressFieldState extends State<IpAddressField>
       return true;
     }
 
-    // if (_effectiveController.text.isNotEmpty) {
-    //   return true;
-    // }
+    if (_effectiveController.text.isNotEmpty) {
+      return true;
+    }
 
     return false;
+  }
+
+  void _handleInnerValueChanged() {
+    final items = _controllers.map((i) => i.text);
+    final isEmpty = items.every((i) => i.isEmpty);
+    if (isEmpty) {
+      _effectiveController.clear();
+    } else {
+      final text = items.join('.');
+      _effectiveController.setText(text);
+    }
+  }
+
+  void _handleValueChanged() {
+    final nums = _effectiveController.text._nums;
+    for (var i = 0; i < 4; i++) {
+      final controller = _controllers[i];
+      final num = nums[i];
+      if (num == null) {
+        controller.clear();
+      } else {
+        controller.setText('$num');
+      }
+    }
   }
 
   void _handleFocusChanged() {
@@ -814,7 +912,7 @@ class _IpAddressFieldState extends State<IpAddressField>
       // Rebuild the widget on focus change to show/hide the text selection
       // highlight.
     });
-    _statesController.update(WidgetState.focused, _effectiveFocusNode.hasFocus);
+    _statesController.update(WidgetState.focused, _isFocused);
   }
 
   void _handleSelectionChanged(
@@ -856,9 +954,9 @@ class _IpAddressFieldState extends State<IpAddressField>
 
   /// Toggle the toolbar when a selection handle is tapped.
   void _handleSelectionHandleTapped() {
-    // if (_effectiveController.selection.isCollapsed) {
-    //   _editableText!.toggleToolbar();
-    // }
+    if (_effectiveController.selection.isCollapsed) {
+      _editableText!.toggleToolbar();
+    }
   }
 
   void _handleHover(bool hovering) {
@@ -902,17 +1000,16 @@ class _IpAddressFieldState extends State<IpAddressField>
 
   @override
   TextInputConfiguration get textInputConfiguration {
-    // final autofillHints = widget.autofillHints?.toList(growable: false);
-    // final autofillConfiguration =
-    //     autofillHints != null
-    //         ? AutofillConfiguration(
-    //           uniqueIdentifier: autofillId,
-    //           autofillHints: autofillHints,
-    //           currentEditingValue: _effectiveController.value,
-    //           hintText: (widget.decoration ?? const InputDecoration()).hintText,
-    //         )
-    //         : AutofillConfiguration.disabled;
-    final autofillConfiguration = AutofillConfiguration.disabled;
+    final autofillHints = widget.autofillHints?.toList(growable: false);
+    final autofillConfiguration =
+        autofillHints != null
+            ? AutofillConfiguration(
+              uniqueIdentifier: autofillId,
+              autofillHints: autofillHints,
+              currentEditingValue: _effectiveController.value,
+              hintText: (widget.decoration ?? const InputDecoration()).hintText,
+            )
+            : AutofillConfiguration.disabled;
     return _editableText!.textInputConfiguration.copyWith(
       autofillConfiguration: autofillConfiguration,
     );
@@ -959,23 +1056,6 @@ class _IpAddressFieldState extends State<IpAddressField>
           : theme.textTheme.titleMedium!,
     ).merge(providedStyle);
     final keyboardAppearance = widget.keyboardAppearance ?? theme.brightness;
-    final formatters = <TextInputFormatter>[
-      ...?widget.inputFormatters,
-      if (widget.maxLength != null)
-        LengthLimitingTextInputFormatter(
-          widget.maxLength,
-          maxLengthEnforcement: _effectiveMaxLengthEnforcement,
-        ),
-      LengthLimitingTextInputFormatter(3),
-      TextInputFormatter.withFunction((oldValue, newValue) {
-        if (newValue.text.isNotEmpty) {
-          final newNum = int.tryParse(newValue.text);
-          if (newNum == null) return oldValue;
-          if (newNum > 255) return newValue.copyWith(text: '255');
-        }
-        return newValue;
-      }),
-    ];
 
     // Set configuration as disabled if not otherwise specified. If specified,
     // ensure that configuration uses the correct style for misspelled words for
@@ -1140,95 +1220,150 @@ class _IpAddressFieldState extends State<IpAddressField>
       child: UnmanagedRestorationScope(
         bucket: bucket,
         child: Row(
-          children: List.generate(4 * 2 - 1, (i) {
-            if (i.isOdd) {
-              return Visibility(
-                visible: _isFocused || !_isEmpty,
-                child: Text('.', style: style, strutStyle: widget.strutStyle),
-              );
-            } else {
-              final controller = _controllers[i ~/ 2].value;
-              final focusNode = _focusNodes[i ~/ 2];
-              return Expanded(
-                child: EditableText(
-                  // key: editableTextKey,
-                  key: i == 0 ? editableTextKey : null,
-                  readOnly: widget.readOnly || !_isEnabled,
-                  toolbarOptions: widget.toolbarOptions,
-                  showCursor: widget.showCursor,
-                  showSelectionHandles: _showSelectionHandles,
-                  controller: controller,
-                  focusNode: focusNode,
-                  undoController: widget.undoController,
-                  keyboardType: widget.keyboardType,
-                  textInputAction: widget.textInputAction,
-                  textCapitalization: widget.textCapitalization,
-                  style: style,
-                  strutStyle: widget.strutStyle,
-                  textAlign: widget.textAlign,
-                  textDirection: widget.textDirection,
-                  autofocus: widget.autofocus,
-                  obscuringCharacter: widget.obscuringCharacter,
-                  obscureText: widget.obscureText,
-                  autocorrect: widget.autocorrect,
-                  smartDashesType: widget.smartDashesType,
-                  smartQuotesType: widget.smartQuotesType,
-                  enableSuggestions: widget.enableSuggestions,
-                  maxLines: widget.maxLines,
-                  minLines: widget.minLines,
-                  expands: widget.expands,
-                  // Only show the selection highlight when the text field is focused.
-                  selectionColor: _isFocused ? selectionColor : null,
-                  selectionControls:
-                      widget.selectionEnabled ? textSelectionControls : null,
-                  onChanged: widget.onChanged,
-                  onSelectionChanged: _handleSelectionChanged,
-                  onEditingComplete: widget.onEditingComplete,
-                  onSubmitted: widget.onSubmitted,
-                  onAppPrivateCommand: widget.onAppPrivateCommand,
-                  groupId: widget.groupId,
-                  onSelectionHandleTapped: _handleSelectionHandleTapped,
-                  onTapOutside: widget.onTapOutside,
-                  onTapUpOutside: widget.onTapUpOutside,
-                  inputFormatters: formatters,
-                  // rendererIgnoresPointer: true,
-                  mouseCursor:
-                      MouseCursor.defer, // TextField will handle the cursor
-                  cursorWidth: widget.cursorWidth,
-                  cursorHeight: widget.cursorHeight,
-                  cursorRadius: cursorRadius,
-                  cursorColor: cursorColor,
-                  selectionHeightStyle: widget.selectionHeightStyle,
-                  selectionWidthStyle: widget.selectionWidthStyle,
-                  cursorOpacityAnimates: cursorOpacityAnimates!,
-                  cursorOffset: cursorOffset,
-                  paintCursorAboveText: paintCursorAboveText,
-                  backgroundCursorColor: CupertinoColors.inactiveGray,
-                  scrollPadding: widget.scrollPadding,
-                  keyboardAppearance: keyboardAppearance,
-                  enableInteractiveSelection: widget.enableInteractiveSelection,
-                  dragStartBehavior: widget.dragStartBehavior,
-                  scrollController: widget.scrollController,
-                  scrollPhysics: widget.scrollPhysics,
-                  autofillClient: this,
-                  autocorrectionTextRectColor: autocorrectionTextRectColor,
-                  clipBehavior: widget.clipBehavior,
-                  restorationId: 'editable',
-                  scribbleEnabled: widget.scribbleEnabled,
-                  stylusHandwritingEnabled: widget.stylusHandwritingEnabled,
-                  enableIMEPersonalizedLearning:
-                      widget.enableIMEPersonalizedLearning,
-                  contentInsertionConfiguration:
-                      widget.contentInsertionConfiguration,
-                  contextMenuBuilder: widget.contextMenuBuilder,
-                  spellCheckConfiguration: spellCheckConfiguration,
-                  magnifierConfiguration:
-                      widget.magnifierConfiguration ??
-                      TextMagnifier.adaptiveMagnifierConfiguration,
-                ),
-              );
-            }
-          }),
+          children: [
+            SizedBox.fromSize(
+              size: Size.zero,
+              child: EditableText(
+                key: editableTextKey,
+                controller: _effectiveController,
+                focusNode: _effectiveFocusNode,
+                style: style,
+                cursorColor: cursorColor,
+                backgroundCursorColor: CupertinoColors.inactiveGray,
+                keyboardType: widget.keyboardType,
+              ),
+            ),
+            ...List.generate(4 * 2 - 1, (i) {
+              if (i.isOdd) {
+                return Visibility(
+                  visible: _isFocused || !_isEmpty,
+                  child: Text('.', style: style, strutStyle: widget.strutStyle),
+                );
+              } else {
+                final index = i ~/ 2;
+                final controller = _controllers[index];
+                final focusNode = _focusNodes[index];
+                return Expanded(
+                  child: EditableText(
+                    // key: index == 0 ? editableTextKey : null,
+                    readOnly: widget.readOnly || !_isEnabled,
+                    toolbarOptions: widget.toolbarOptions,
+                    showCursor: widget.showCursor,
+                    showSelectionHandles: _showSelectionHandles,
+                    controller: controller,
+                    focusNode: focusNode,
+                    undoController: widget.undoController,
+                    keyboardType: widget.keyboardType,
+                    textInputAction: widget.textInputAction,
+                    textCapitalization: widget.textCapitalization,
+                    style: style,
+                    strutStyle: widget.strutStyle,
+                    textAlign: widget.textAlign,
+                    textDirection: widget.textDirection,
+                    autofocus: widget.autofocus,
+                    obscuringCharacter: widget.obscuringCharacter,
+                    obscureText: widget.obscureText,
+                    autocorrect: widget.autocorrect,
+                    smartDashesType: widget.smartDashesType,
+                    smartQuotesType: widget.smartQuotesType,
+                    enableSuggestions: widget.enableSuggestions,
+                    maxLines: widget.maxLines,
+                    minLines: widget.minLines,
+                    expands: widget.expands,
+                    // Only show the selection highlight when the text field is focused.
+                    selectionColor: _isFocused ? selectionColor : null,
+                    selectionControls:
+                        widget.selectionEnabled ? textSelectionControls : null,
+                    onChanged: (text) {
+                      if (index < 3 &&
+                          text.length >= 3 &&
+                          controller.value.selection.textAfter(text).isEmpty &&
+                          _controllers[index + 1].value.text.isEmpty) {
+                        _focusNodes[index + 1].requestFocus();
+                      }
+                      widget.onChanged?.call(_effectiveController.text);
+                    },
+                    onSelectionChanged: _handleSelectionChanged,
+                    onEditingComplete: () {
+                      if (index < 3) {
+                        _focusNodes[index + 1].requestFocus();
+                      } else {
+                        focusNode.unfocus();
+                        widget.onEditingComplete?.call();
+                      }
+                    },
+                    onSubmitted: (_) {
+                      if (index != 3) return;
+                      widget.onSubmitted?.call(_effectiveController.text);
+                    },
+                    onAppPrivateCommand: widget.onAppPrivateCommand,
+                    groupId: widget.groupId,
+                    onSelectionHandleTapped: _handleSelectionHandleTapped,
+                    onTapOutside: widget.onTapOutside,
+                    onTapUpOutside: widget.onTapUpOutside,
+                    inputFormatters: [
+                      ...?widget.inputFormatters,
+                      LengthLimitingTextInputFormatter(3),
+                      TextInputFormatter.withFunction((oldValue, newValue) {
+                        if (newValue.text.isNotEmpty) {
+                          if (index < 3 &&
+                              // oldValue.text.isNotEmpty &&
+                              newValue.text.startsWith(oldValue.text) &&
+                              newValue.text.substring(
+                                    oldValue.selection.base.offset,
+                                  ) ==
+                                  '.') {
+                            _focusNodes[index + 1].requestFocus();
+                            return oldValue;
+                          }
+                          final newNum = int.tryParse(newValue.text);
+                          if (newNum == null) return oldValue;
+                          if (newNum > 255)
+                            return newValue.copyWith(text: '255');
+                        }
+                        return newValue;
+                      }),
+                    ],
+                    // rendererIgnoresPointer: true,
+                    mouseCursor:
+                        MouseCursor.defer, // TextField will handle the cursor
+                    cursorWidth: widget.cursorWidth,
+                    cursorHeight: widget.cursorHeight,
+                    cursorRadius: cursorRadius,
+                    cursorColor: cursorColor,
+                    selectionHeightStyle: widget.selectionHeightStyle,
+                    selectionWidthStyle: widget.selectionWidthStyle,
+                    cursorOpacityAnimates: cursorOpacityAnimates!,
+                    cursorOffset: cursorOffset,
+                    paintCursorAboveText: paintCursorAboveText,
+                    backgroundCursorColor: CupertinoColors.inactiveGray,
+                    scrollPadding: widget.scrollPadding,
+                    keyboardAppearance: keyboardAppearance,
+                    enableInteractiveSelection:
+                        widget.enableInteractiveSelection,
+                    dragStartBehavior: widget.dragStartBehavior,
+                    scrollController: widget.scrollController,
+                    scrollPhysics: widget.scrollPhysics,
+                    autofillClient: this,
+                    autocorrectionTextRectColor: autocorrectionTextRectColor,
+                    clipBehavior: widget.clipBehavior,
+                    restorationId: 'editable',
+                    scribbleEnabled: widget.scribbleEnabled,
+                    stylusHandwritingEnabled: widget.stylusHandwritingEnabled,
+                    enableIMEPersonalizedLearning:
+                        widget.enableIMEPersonalizedLearning,
+                    contentInsertionConfiguration:
+                        widget.contentInsertionConfiguration,
+                    contextMenuBuilder: widget.contextMenuBuilder,
+                    spellCheckConfiguration: spellCheckConfiguration,
+                    magnifierConfiguration:
+                        widget.magnifierConfiguration ??
+                        TextMagnifier.adaptiveMagnifierConfiguration,
+                  ),
+                );
+              }
+            }),
+          ],
         ),
       ),
     );
@@ -1286,13 +1421,13 @@ class _IpAddressFieldState extends State<IpAddressField>
                     widget.readOnly
                         ? null
                         : () {
+                          debugPrint('IpAddressField: onTap');
                           // if (!_effectiveController.selection.isValid) {
                           //   _effectiveController
                           //       .selection = TextSelection.collapsed(
                           //     offset: _effectiveController.text.length,
                           //   );
                           // }
-                          debugPrint('IpAddressField: onTap');
                           _requestKeyboard();
                         },
                 onDidGainAccessibilityFocus: handleDidGainAccessibilityFocus,
@@ -1313,9 +1448,6 @@ class _IpAddressFieldState extends State<IpAddressField>
                           if (_effectiveFocusNode.canRequestFocus &&
                               !_effectiveFocusNode.hasFocus) {
                             _effectiveFocusNode.requestFocus();
-                            debugPrint(
-                              'IpAddressField: ${_effectiveFocusNode.hasFocus}',
-                            );
                           } else if (!widget.readOnly) {
                             // If the platform requested focus, that means that previously the
                             // platform believed that the text field did not have focus (even
@@ -1382,3 +1514,30 @@ TextStyle _m3CounterErrorStyle(BuildContext context) =>
 // dart format on
 
 // END GENERATED TOKEN PROPERTIES - TextField
+
+extension on TextEditingController {
+  void setText(String text) {
+    value = value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+      composing: TextRange.empty,
+    );
+  }
+}
+
+extension on String {
+  List<int?> get _nums {
+    final items = split('.');
+    if (items.length > 4) throw ArgumentError.value(this);
+    return [
+      items.elementAtOrNull(0)?._num,
+      items.elementAtOrNull(1)?._num,
+      items.elementAtOrNull(2)?._num,
+      items.elementAtOrNull(3)?._num,
+    ];
+  }
+
+  int? get _num {
+    return isEmpty ? null : int.parse(this);
+  }
+}
