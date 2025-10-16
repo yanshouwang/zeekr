@@ -141,8 +141,9 @@ class IpAddressField extends StatefulWidget {
        //    'Use keyboardType TextInputType.multiline when using TextInputAction.newline on a multiline TextField.',
        //  ),
        keyboardType = TextInputType.number,
-       enableInteractiveSelection =
-           enableInteractiveSelection ?? (!readOnly || !obscureText);
+       // TODO: Fix selection issue on desktop
+       // enableInteractiveSelection = enableInteractiveSelection ?? (!readOnly || !obscureText),
+       enableInteractiveSelection = false;
 
   final TextMagnifierConfiguration? magnifierConfiguration;
   final Object groupId;
@@ -684,6 +685,8 @@ class _IpAddressFieldState extends State<IpAddressField>
     if (widget.controller == null) {
       _createLocalController();
     }
+
+    _effectiveController.addListener(_handleValueChanged);
 
     // TODO: How to make this focusable.
     // _effectiveFocusNode.canRequestFocus = widget.canRequestFocus && _isEnabled;
@@ -1422,12 +1425,12 @@ class _IpAddressFieldState extends State<IpAddressField>
                         ? null
                         : () {
                           debugPrint('IpAddressField: onTap');
-                          // if (!_effectiveController.selection.isValid) {
-                          //   _effectiveController
-                          //       .selection = TextSelection.collapsed(
-                          //     offset: _effectiveController.text.length,
-                          //   );
-                          // }
+                          if (!_effectiveController.selection.isValid) {
+                            _effectiveController
+                                .selection = TextSelection.collapsed(
+                              offset: _effectiveController.text.length,
+                            );
+                          }
                           _requestKeyboard();
                         },
                 onDidGainAccessibilityFocus: handleDidGainAccessibilityFocus,
@@ -1467,11 +1470,10 @@ class _IpAddressFieldState extends State<IpAddressField>
                 child: child,
               );
             },
-            // child: _selectionGestureDetectorBuilder.buildGestureDetector(
-            //   behavior: HitTestBehavior.translucent,
-            //   child: child,
-            // ),
-            child: child,
+            child: _selectionGestureDetectorBuilder.buildGestureDetector(
+              behavior: HitTestBehavior.translucent,
+              child: child,
+            ),
           ),
         ),
       ),
@@ -1517,6 +1519,7 @@ TextStyle _m3CounterErrorStyle(BuildContext context) =>
 
 extension on TextEditingController {
   void setText(String text) {
+    if (value.text == text) return;
     value = value.copyWith(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),

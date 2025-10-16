@@ -90,7 +90,7 @@ class IpAddressFormField extends FormField<String> {
     ui.BoxWidthStyle selectionWidthStyle = ui.BoxWidthStyle.tight,
     DragStartBehavior dragStartBehavior = DragStartBehavior.start,
     ContentInsertionConfiguration? contentInsertionConfiguration,
-    MaterialStatesController? statesController,
+    WidgetStatesController? statesController,
     Clip clipBehavior = Clip.hardEdge,
     @Deprecated(
       'Use `stylusHandwritingEnabled` instead. '
