@@ -693,38 +693,10 @@ class _IpAddressFieldState extends State<IpAddressField>
     _effectiveFocusNode.canRequestFocus = false;
     _effectiveFocusNode.addListener(_handleFocusChanged);
 
-    final nums = _effectiveController.text._nums;
-    _controllers = List.generate(4, (i) {
-      final text = nums[i]?.toString();
-      return TextEditingController(text: text)
-        ..addListener(_handleInnerValueChanged);
-    });
-
-    _focusNodes = List.generate(4, (i) {
-      return FocusNode(
-          onKeyEvent: (node, event) {
-            final controller = _controllers[i];
-            if (event is KeyDownEvent &&
-                event.logicalKey == LogicalKeyboardKey.backspace &&
-                controller.selection.textBefore(controller.text).isEmpty &&
-                i > 0) {
-              final newController = _controllers[i - 1];
-              final newFocusNode = _focusNodes[i - 1];
-              if (newController.text.isNotEmpty) {
-                final end = newController.text.length - 1;
-                final text = newController.text.substring(0, end);
-                newController.setText(text);
-              }
-              newFocusNode.requestFocus();
-              return KeyEventResult.handled;
-            } else {
-              return KeyEventResult.ignored;
-            }
-          },
-        )
-        ..canRequestFocus = widget.canRequestFocus && _isEnabled
-        ..addListener(_handleFocusChanged);
-    });
+    _controllers = [];
+    _focusNodes = [];
+    _createLocalControllers(_effectiveController.value);
+    _createLocalFocusNodes();
 
     _initStatesController();
   }
@@ -755,8 +727,6 @@ class _IpAddressFieldState extends State<IpAddressField>
       focusNode.canRequestFocus = _canRequestFocus;
     }
 
-    // TODO: Update inner controller values.
-
     if (widget.controller == null && oldWidget.controller != null) {
       _createLocalController(oldWidget.controller!.value);
     } else if (widget.controller != null && oldWidget.controller == null) {
@@ -770,6 +740,12 @@ class _IpAddressFieldState extends State<IpAddressField>
       (oldWidget.controller ?? _controller)?.removeListener(
         _handleValueChanged,
       );
+      for (var controller in _controllers) {
+        controller.removeListener(_handleLocalValueChanged);
+        controller.dispose();
+      }
+      _controllers.clear();
+      _createLocalControllers(_effectiveController.value);
       (widget.controller ?? _controller)?.addListener(_handleValueChanged);
     }
 
@@ -826,13 +802,54 @@ class _IpAddressFieldState extends State<IpAddressField>
     }
   }
 
+  void _createLocalControllers(TextEditingValue value) {
+    assert(_controllers.isEmpty);
+    final nums = value.text._nums;
+    final controllers = List.generate(4, (i) {
+      final text = nums[i]?.toString();
+      return TextEditingController(text: text)
+        ..addListener(_handleLocalValueChanged);
+    });
+    _controllers.addAll(controllers);
+  }
+
+  void _createLocalFocusNodes() {
+    assert(_focusNodes.isEmpty);
+    final focusNodes = List.generate(4, (i) {
+      return FocusNode(
+          onKeyEvent: (node, event) {
+            final controller = _controllers[i];
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.backspace &&
+                controller.selection.textBefore(controller.text).isEmpty &&
+                i > 0) {
+              final newController = _controllers[i - 1];
+              final newFocusNode = _focusNodes[i - 1];
+              if (newController.text.isNotEmpty) {
+                final end = newController.text.length - 1;
+                final text = newController.text.substring(0, end);
+                newController.setText(text);
+              }
+              newFocusNode.requestFocus();
+              return KeyEventResult.handled;
+            } else {
+              return KeyEventResult.ignored;
+            }
+          },
+        )
+        ..canRequestFocus = widget.canRequestFocus && _isEnabled
+        ..addListener(_handleFocusChanged);
+    });
+    _focusNodes.addAll(focusNodes);
+  }
+
   @override
   String? get restorationId => widget.restorationId;
 
   @override
   void dispose() {
     for (var controller in _controllers) {
-      controller.removeListener(_handleInnerValueChanged);
+      controller.removeListener(_handleLocalValueChanged);
       controller.dispose();
     }
     for (var focusNode in _focusNodes) {
@@ -886,7 +903,7 @@ class _IpAddressFieldState extends State<IpAddressField>
     return false;
   }
 
-  void _handleInnerValueChanged() {
+  void _handleLocalValueChanged() {
     final items = _controllers.map((i) => i.text);
     final isEmpty = items.every((i) => i.isEmpty);
     if (isEmpty) {
