@@ -9,12 +9,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'ip_address_field.dart';
+import 'internet_address_field.dart';
 
 export 'package:flutter/services.dart' show SmartDashesType, SmartQuotesType;
 
-class IpAddressFormField extends FormField<String> {
-  IpAddressFormField({
+class InternetAddressFormField extends FormField<String> {
+  InternetAddressFormField({
     super.key,
     this.groupId = EditableText,
     this.controller,
@@ -127,7 +127,8 @@ class IpAddressFormField extends FormField<String> {
          enabled: enabled ?? decoration?.enabled ?? true,
          autovalidateMode: autovalidateMode ?? AutovalidateMode.disabled,
          builder: (FormFieldState<String> field) {
-           final _TextFormFieldState state = field as _TextFormFieldState;
+           final _InternetAddressFormFieldState state =
+               field as _InternetAddressFormFieldState;
            InputDecoration effectiveDecoration = (decoration ??
                    const InputDecoration())
                .applyDefaults(Theme.of(field.context).inputDecorationTheme);
@@ -149,7 +150,7 @@ class IpAddressFormField extends FormField<String> {
 
            return UnmanagedRestorationScope(
              bucket: field.bucket,
-             child: IpAddressField(
+             child: InternetAddressField(
                groupId: groupId,
                restorationId: restorationId,
                controller: state._effectiveController,
@@ -263,16 +264,17 @@ class IpAddressFormField extends FormField<String> {
   }
 
   @override
-  FormFieldState<String> createState() => _TextFormFieldState();
+  FormFieldState<String> createState() => _InternetAddressFormFieldState();
 }
 
-class _TextFormFieldState extends FormFieldState<String> {
+class _InternetAddressFormFieldState extends FormFieldState<String> {
   RestorableTextEditingController? _controller;
 
   TextEditingController get _effectiveController =>
       _textFormField.controller ?? _controller!.value;
 
-  IpAddressFormField get _textFormField => super.widget as IpAddressFormField;
+  InternetAddressFormField get _textFormField =>
+      super.widget as InternetAddressFormField;
 
   @override
   void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
@@ -316,7 +318,7 @@ class _TextFormFieldState extends FormFieldState<String> {
   }
 
   @override
-  void didUpdateWidget(IpAddressFormField oldWidget) {
+  void didUpdateWidget(InternetAddressFormField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_textFormField.controller != oldWidget.controller) {
       oldWidget.controller?.removeListener(_handleControllerChanged);

@@ -7,14 +7,14 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-class _IpAddressFieldSelectionGestureDetectorBuilder
+class _InternetAddressFieldSelectionGestureDetectorBuilder
     extends TextSelectionGestureDetectorBuilder {
-  _IpAddressFieldSelectionGestureDetectorBuilder({
-    required _IpAddressFieldState state,
+  _InternetAddressFieldSelectionGestureDetectorBuilder({
+    required _InternetAddressFieldState state,
   }) : _state = state,
        super(delegate: state);
 
-  final _IpAddressFieldState _state;
+  final _InternetAddressFieldState _state;
 
   @override
   bool get onUserTapAlwaysCalled => _state.widget.onTapAlwaysCalled;
@@ -25,8 +25,8 @@ class _IpAddressFieldSelectionGestureDetectorBuilder
   }
 }
 
-class IpAddressField extends StatefulWidget {
-  const IpAddressField({
+class InternetAddressField extends StatefulWidget {
+  const InternetAddressField({
     super.key,
     this.groupId = EditableText,
     this.controller,
@@ -130,7 +130,7 @@ class IpAddressField extends StatefulWidget {
        ),
        //  assert(
        //    maxLength == null ||
-       //        maxLength == IpAddressField.noMaxLength ||
+       //        maxLength == InternetAddressField.noMaxLength ||
        //        maxLength > 0,
        //  ),
        // Assert the following instead of setting it directly to avoid surprising the user by silently changing the value they set.
@@ -277,15 +277,15 @@ class IpAddressField extends StatefulWidget {
     return configuration.copyWith(
       misspelledTextStyle:
           configuration.misspelledTextStyle ??
-          IpAddressField.materialMisspelledTextStyle,
+          InternetAddressField.materialMisspelledTextStyle,
       spellCheckSuggestionsToolbarBuilder:
           configuration.spellCheckSuggestionsToolbarBuilder ??
-          IpAddressField.defaultSpellCheckSuggestionsToolbarBuilder,
+          InternetAddressField.defaultSpellCheckSuggestionsToolbarBuilder,
     );
   }
 
   @override
-  State<IpAddressField> createState() => _IpAddressFieldState();
+  State<InternetAddressField> createState() => _InternetAddressFieldState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
@@ -525,7 +525,7 @@ class IpAddressField extends StatefulWidget {
   }
 }
 
-class _IpAddressFieldState extends State<IpAddressField>
+class _InternetAddressFieldState extends State<InternetAddressField>
     with RestorationMixin
     implements TextSelectionGestureDetectorBuilderDelegate, AutofillClient {
   late final List<TextEditingController> _controllers;
@@ -554,7 +554,7 @@ class _IpAddressFieldState extends State<IpAddressField>
 
   bool _showSelectionHandles = false;
 
-  late _IpAddressFieldSelectionGestureDetectorBuilder
+  late _InternetAddressFieldSelectionGestureDetectorBuilder
   _selectionGestureDetectorBuilder;
 
   // API for TextSelectionGestureDetectorBuilderDelegate.
@@ -680,7 +680,7 @@ class _IpAddressFieldState extends State<IpAddressField>
   void initState() {
     super.initState();
     _selectionGestureDetectorBuilder =
-        _IpAddressFieldSelectionGestureDetectorBuilder(state: this);
+        _InternetAddressFieldSelectionGestureDetectorBuilder(state: this);
 
     if (widget.controller == null) {
       _createLocalController();
@@ -720,7 +720,7 @@ class _IpAddressFieldState extends State<IpAddressField>
   }
 
   @override
-  void didUpdateWidget(IpAddressField oldWidget) {
+  void didUpdateWidget(InternetAddressField oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     for (var focusNode in _focusNodes) {
@@ -1093,7 +1093,7 @@ class _IpAddressFieldState extends State<IpAddressField>
       case TargetPlatform.linux:
       case TargetPlatform.windows:
         spellCheckConfiguration =
-            IpAddressField.inferAndroidSpellCheckConfiguration(
+            InternetAddressField.inferAndroidSpellCheckConfiguration(
               widget.spellCheckConfiguration,
             );
     }
@@ -1441,7 +1441,7 @@ class _IpAddressFieldState extends State<IpAddressField>
                     widget.readOnly
                         ? null
                         : () {
-                          debugPrint('IpAddressField: onTap');
+                          debugPrint('IneternetAddressField: onTap');
                           if (!_effectiveController.selection.isValid) {
                             _effectiveController
                                 .selection = TextSelection.collapsed(
@@ -1455,7 +1455,7 @@ class _IpAddressFieldState extends State<IpAddressField>
                 onFocus:
                     _isEnabled
                         ? () {
-                          debugPrint('IpAddressField: onFocus');
+                          debugPrint('IneternetAddressField: onFocus');
                           assert(
                             _effectiveFocusNode.canRequestFocus,
                             'Received SemanticsAction.focus from the engine. However, the FocusNode '

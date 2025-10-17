@@ -71,7 +71,7 @@ class _HomeViewState extends State<HomeView> {
                 initialValue: '192.168.0.1',
                 // controller: _ipAddressController,
               ),
-              IpAddressFormField(
+              InternetAddressFormField(
                 validator:
                     (value) =>
                         value == null || !ExpUtil.ipAddress.hasMatch(value)
